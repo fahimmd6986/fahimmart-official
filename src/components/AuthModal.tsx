@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { X, Mail, Lock, User as UserIcon, Shield } from 'lucide-react';
 import { User } from '../types';
+import { saveUserToCloud, saveAuditLogToCloud } from '../lib/firebaseService';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -63,18 +64,21 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, initialMode
 
       storedUsers.push(newUser);
       localStorage.setItem('fm_users', JSON.stringify(storedUsers));
+      saveUserToCloud(newUser).catch(err => console.error("Error saving user to Firestore:", err));
       
       // Log audit
       const auditLogs = JSON.parse(localStorage.getItem('fm_audit_logs') || '[]');
-      auditLogs.unshift({
+      const newAuditLog = {
         id: 'log_' + Date.now(),
         userEmail: newUser.email,
         action: 'USER_REGISTER',
         details: `Successfully registered new account. Assigned role: ${newUser.role}`,
         timestamp: new Date().toISOString(),
-        status: 'SUCCESS'
-      });
+        status: 'SUCCESS' as const
+      };
+      auditLogs.unshift(newAuditLog);
       localStorage.setItem('fm_audit_logs', JSON.stringify(auditLogs));
+      saveAuditLogToCloud(newAuditLog).catch(err => console.error("Error saving audit log to Firestore:", err));
 
       setSuccess(`Account registered successfully as a ${newUser.role}! Logging in...`);
       setTimeout(() => {
@@ -99,20 +103,23 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, initialMode
         };
         storedUsers.push(targetUser);
         localStorage.setItem('fm_users', JSON.stringify(storedUsers));
+        saveUserToCloud(targetUser).catch(err => console.error("Error saving auto-seeded admin user to Firestore:", err));
       }
 
       if (!targetUser) {
         // Log failed login audit
         const auditLogs = JSON.parse(localStorage.getItem('fm_audit_logs') || '[]');
-        auditLogs.unshift({
+        const failAuditLog = {
           id: 'log_' + Date.now(),
           userEmail: email,
           action: 'USER_LOGIN_FAIL',
           details: 'Failed login attempt. Account does not exist.',
           timestamp: new Date().toISOString(),
-          status: 'FAILED'
-        });
+          status: 'FAILED' as const
+        };
+        auditLogs.unshift(failAuditLog);
         localStorage.setItem('fm_audit_logs', JSON.stringify(auditLogs));
+        saveAuditLogToCloud(failAuditLog).catch(err => console.error("Error saving login fail audit log to Firestore:", err));
 
         setError('No account found with this email. Please register.');
         return;
@@ -122,15 +129,17 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess, initialMode
       // In a simulation we accept standard passwords.
       // Log successful login audit
       const auditLogs = JSON.parse(localStorage.getItem('fm_audit_logs') || '[]');
-      auditLogs.unshift({
+      const successAuditLog = {
         id: 'log_' + Date.now(),
         userEmail: targetUser.email,
         action: 'USER_LOGIN_SUCCESS',
         details: `Logged in successfully. Role: ${targetUser.role}`,
         timestamp: new Date().toISOString(),
-        status: 'SUCCESS'
-      });
+        status: 'SUCCESS' as const
+      };
+      auditLogs.unshift(successAuditLog);
       localStorage.setItem('fm_audit_logs', JSON.stringify(auditLogs));
+      saveAuditLogToCloud(successAuditLog).catch(err => console.error("Error saving login success audit log to Firestore:", err));
 
       setSuccess(`Welcome back, ${targetUser.name}!`);
       const userToSave = targetUser;

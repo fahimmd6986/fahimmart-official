@@ -370,13 +370,16 @@ export default function ProductDetail({
             </div>
 
             {/* BUY ON AMAZON primary action button */}
-            <button
+            <a
               id="buy-on-amazon-btn"
-              onClick={handleRedirect}
-              className="w-full cursor-pointer rounded-xl bg-amber-500 py-3 text-center text-xs font-black uppercase tracking-wider text-slate-950 shadow-md hover:bg-amber-400 transition"
+              href={product.affiliateUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => onTrackRedirect(product)}
+              className="block w-full cursor-pointer rounded-xl bg-amber-500 py-3 text-center text-xs font-black uppercase tracking-wider text-slate-950 shadow-md hover:bg-amber-400 transition"
             >
               Buy on Amazon
-            </button>
+            </a>
 
             {/* Cart & Wishlist auxiliary selectors */}
             <div className="grid grid-cols-2 gap-2">
@@ -421,6 +424,21 @@ export default function ProductDetail({
         
         {/* Full narrative descriptions & Full spec list */}
         <div className="space-y-6 lg:col-span-8">
+          {product.aiField && (
+            <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/[0.04] to-amber-600/[0.01] p-5 relative overflow-hidden shadow-sm">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl -mr-4 -mt-4 pointer-events-none" />
+              <div className="flex items-center gap-2 mb-3">
+                <span className="flex h-5 items-center justify-center rounded-md bg-amber-500 px-2 text-[9.5px] font-black uppercase text-slate-950 tracking-wider">
+                  ✨ AI Stylist & Setup Insight
+                </span>
+                <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400 font-bold">FahimMart AI</span>
+              </div>
+              <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                {product.aiField}
+              </p>
+            </div>
+          )}
+
           <div>
             <h3 className="text-base font-extrabold text-slate-950 dark:text-white font-sans tracking-tight">Curation Narrative Overview</h3>
             <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">

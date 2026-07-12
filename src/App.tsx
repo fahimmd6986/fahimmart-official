@@ -21,6 +21,20 @@ import {
   INITIAL_SETTINGS 
 } from './data/initialData';
 
+import {
+  seedDatabaseIfEmpty,
+  subscribeToProducts,
+  subscribeToCategories,
+  subscribeToBanners,
+  subscribeToSettings,
+  saveProductToCloud,
+  deleteProductFromCloud,
+  saveCategoryToCloud,
+  deleteCategoryFromCloud,
+  saveBannersToCloud,
+  saveSettingsToCloud
+} from './lib/firebaseService';
+
 // Component imports
 import Header from './components/Header';
 import Footer from './components/Footer';
@@ -74,38 +88,40 @@ export default function App() {
       document.documentElement.classList.add('dark');
     }
 
-    // 2. Load Core Content (Products, Categories, Banners, Settings)
-    const storedProds = localStorage.getItem('fm_products');
-    if (storedProds) {
-      setProducts(JSON.parse(storedProds));
-    } else {
-      setProducts(INITIAL_PRODUCTS);
-      localStorage.setItem('fm_products', JSON.stringify(INITIAL_PRODUCTS));
-    }
+    // 2. Real-time synchronization and seeding with Firebase Firestore
+    let unsubProducts: (() => void) | undefined;
+    let unsubCategories: (() => void) | undefined;
+    let unsubBanners: (() => void) | undefined;
+    let unsubSettings: (() => void) | undefined;
 
-    const storedCats = localStorage.getItem('fm_categories');
-    if (storedCats) {
-      setCategories(JSON.parse(storedCats));
-    } else {
-      setCategories(INITIAL_CATEGORIES);
-      localStorage.setItem('fm_categories', JSON.stringify(INITIAL_CATEGORIES));
-    }
+    const initializeAndSubscribe = async () => {
+      // Seed database first if empty
+      await seedDatabaseIfEmpty();
 
-    const storedBanners = localStorage.getItem('fm_banners');
-    if (storedBanners) {
-      setBanners(JSON.parse(storedBanners));
-    } else {
-      setBanners(INITIAL_BANNERS);
-      localStorage.setItem('fm_banners', JSON.stringify(INITIAL_BANNERS));
-    }
+      // Subscribe to Products
+      unsubProducts = subscribeToProducts((loadedProducts) => {
+        setProducts(loadedProducts);
+      });
 
-    const storedSettings = localStorage.getItem('fm_settings');
-    if (storedSettings) {
-      setSettings(JSON.parse(storedSettings));
-    } else {
-      setSettings(INITIAL_SETTINGS);
-      localStorage.setItem('fm_settings', JSON.stringify(INITIAL_SETTINGS));
-    }
+      // Subscribe to Categories
+      unsubCategories = subscribeToCategories((loadedCategories) => {
+        setCategories(loadedCategories);
+      });
+
+      // Subscribe to Banners
+      unsubBanners = subscribeToBanners((loadedBanners) => {
+        setBanners(loadedBanners);
+      });
+
+      // Subscribe to Settings
+      unsubSettings = subscribeToSettings((loadedSettings) => {
+        setSettings(loadedSettings);
+      });
+    };
+
+    initializeAndSubscribe().catch((err) => {
+      console.error('Error initializing Firestore data:', err);
+    });
 
     // 3. Load user session
     const activeSession = localStorage.getItem('fm_user_session');
@@ -149,6 +165,13 @@ export default function App() {
       }];
       localStorage.setItem('fm_audit_logs', JSON.stringify(initialLogs));
     }
+
+    return () => {
+      if (unsubProducts) unsubProducts();
+      if (unsubCategories) unsubCategories();
+      if (unsubBanners) unsubBanners();
+      if (unsubSettings) unsubSettings();
+    };
   }, []);
 
   // --- AUTOMATED CAROUSEL TIMER ---
@@ -265,24 +288,18 @@ export default function App() {
 
   // Product CRUD state connectors (linked to Admin panel)
   const handleAddProduct = (newProd: Product) => {
-    const updated = [newProd, ...products];
-    setProducts(updated);
-    localStorage.setItem('fm_products', JSON.stringify(updated));
+    saveProductToCloud(newProd).catch(err => console.error("Error adding product to cloud:", err));
   };
 
   const handleUpdateProduct = (updatedProd: Product) => {
-    const updated = products.map(p => p.id === updatedProd.id ? updatedProd : p);
-    setProducts(updated);
-    localStorage.setItem('fm_products', JSON.stringify(updated));
+    saveProductToCloud(updatedProd).catch(err => console.error("Error updating product in cloud:", err));
     if (selectedProduct?.id === updatedProd.id) {
       setSelectedProduct(updatedProd);
     }
   };
 
   const handleDeleteProduct = (productId: string) => {
-    const updated = products.filter(p => p.id !== productId);
-    setProducts(updated);
-    localStorage.setItem('fm_products', JSON.stringify(updated));
+    deleteProductFromCloud(productId).catch(err => console.error("Error deleting product from cloud:", err));
     if (selectedProduct?.id === productId) {
       setSelectedProduct(null);
       setCurrentPage('home');
@@ -291,21 +308,15 @@ export default function App() {
 
   // Categories CRUD state connectors
   const handleAddCategory = (newCat: Category) => {
-    const updated = [...categories, newCat];
-    setCategories(updated);
-    localStorage.setItem('fm_categories', JSON.stringify(updated));
+    saveCategoryToCloud(newCat).catch(err => console.error("Error adding category to cloud:", err));
   };
 
   const handleUpdateCategory = (updatedCat: Category) => {
-    const updated = categories.map(c => c.id === updatedCat.id ? updatedCat : c);
-    setCategories(updated);
-    localStorage.setItem('fm_categories', JSON.stringify(updated));
+    saveCategoryToCloud(updatedCat).catch(err => console.error("Error updating category in cloud:", err));
   };
 
   const handleDeleteCategory = (categoryId: string) => {
-    const updated = categories.filter(c => c.id !== categoryId);
-    setCategories(updated);
-    localStorage.setItem('fm_categories', JSON.stringify(updated));
+    deleteCategoryFromCloud(categoryId).catch(err => console.error("Error deleting category from cloud:", err));
   };
 
   // Wishlist actions
@@ -319,6 +330,14 @@ export default function App() {
     }
     setWishlist(updated);
     localStorage.setItem('fm_wishlist', JSON.stringify(updated));
+  };
+
+  const handleUpdateBanners = (updatedBanners: Banner[]) => {
+    saveBannersToCloud(updatedBanners).catch(err => console.error("Error saving banners to cloud:", err));
+  };
+
+  const handleUpdateSettings = (updatedSettings: WebsiteSettings) => {
+    saveSettingsToCloud(updatedSettings).catch(err => console.error("Error saving settings to cloud:", err));
   };
 
   const handleAddOutfitComboWishlist = (combo: OutfitCombination) => {
@@ -637,9 +656,9 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Amazon-style product card listings */}
+                  {/* Amazon-style product card listings with premium, uniform, and responsive layout */}
                   {storeProducts.length > 0 ? (
-                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
                       {storeProducts.map(prod => {
                         const wishlisted = wishlist.some(p => p.id === prod.id);
                         const inCart = cart.some(p => p.id === prod.id);
@@ -647,10 +666,10 @@ export default function App() {
                         return (
                           <div
                             key={prod.id}
-                            className="group relative flex flex-col justify-between overflow-hidden rounded-2xl bg-white border border-slate-150 p-4 shadow-sm hover:shadow-xl hover:border-amber-500 dark:bg-slate-900 dark:border-slate-800 transition duration-300"
+                            className="group relative flex flex-col justify-between h-full overflow-hidden rounded-xl bg-white border border-slate-100 p-3 sm:p-4 shadow-xs hover:shadow-lg hover:border-amber-400 dark:bg-slate-900 dark:border-slate-800 transition-all duration-300"
                           >
-                            {/* Card Image */}
-                            <div className="relative aspect-square overflow-hidden rounded-xl bg-slate-50 dark:bg-slate-950 mb-3.5">
+                            {/* Card Image - Guaranteed aspect-square for perfect alignment */}
+                            <div className="relative aspect-square overflow-hidden rounded-lg bg-slate-50 dark:bg-slate-950 mb-3 flex items-center justify-center">
                               <img
                                 referrerPolicy="no-referrer"
                                 src={prod.mainImage}
@@ -664,65 +683,74 @@ export default function App() {
                                   e.stopPropagation();
                                   handleToggleWishlist(prod);
                                 }}
-                                className={`absolute top-2.5 right-2.5 h-8 w-8 rounded-full bg-white/80 backdrop-blur-xs flex items-center justify-center text-slate-400 hover:text-rose-600 dark:bg-slate-950/80 cursor-pointer ${wishlisted ? 'text-rose-500' : ''}`}
+                                className={`absolute top-2 right-2 h-7 w-7 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center text-slate-400 hover:text-rose-600 dark:bg-slate-950/90 shadow-xs cursor-pointer transition ${wishlisted ? 'text-rose-500' : ''}`}
                               >
-                                <Heart size={14} className={wishlisted ? 'fill-rose-500' : ''} />
+                                <Heart size={13} className={wishlisted ? 'fill-rose-500 text-rose-500' : ''} />
                               </button>
 
                               {/* Prime badge overlay */}
                               {prod.isPrime && (
-                                <span className="absolute bottom-2 left-2 inline-flex items-center gap-0.5 rounded-xs bg-blue-600 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-wider text-white shadow-xs">
+                                <span className="absolute bottom-1.5 left-1.5 inline-flex items-center gap-0.5 rounded-xs bg-blue-600 px-1 py-0.5 text-[7px] font-black uppercase tracking-wider text-white shadow-xs">
                                   ✓ Prime
                                 </span>
                               )}
                             </div>
 
-                            {/* Info */}
-                            <div className="space-y-1" onClick={() => setSelectedProduct(prod)}>
-                              <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">{prod.brand}</span>
-                              <h4 className="font-sans text-xs font-extrabold text-slate-950 dark:text-white truncate group-hover:text-amber-500 cursor-pointer">
-                                {prod.title}
-                              </h4>
-
-                              {/* Ratings */}
-                              <div className="flex items-center gap-1">
-                                <span className="flex text-amber-400">
-                                  {Array.from({ length: 5 }).map((_, i) => (
-                                    <Star key={i} size={11} className={i < Math.floor(prod.rating) ? 'fill-amber-400 text-amber-400' : 'text-slate-100 dark:text-slate-800'} />
-                                  ))}
+                            {/* Info Section - Clicking redirects to custom product detail detail page */}
+                            <div 
+                              className="flex-1 flex flex-col justify-between cursor-pointer"
+                              onClick={() => {
+                                setSelectedProduct(prod);
+                                setCurrentPage('product-detail');
+                              }}
+                            >
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 dark:text-slate-500 block">
+                                  {prod.brand}
                                 </span>
-                                <span className="text-[10px] font-bold text-slate-500">({prod.reviewCount})</span>
+                                <h4 className="font-sans text-xs font-bold text-slate-900 dark:text-white line-clamp-2 group-hover:text-amber-500 transition-colors leading-snug">
+                                  {prod.title}
+                                </h4>
+
+                                {/* Ratings */}
+                                <div className="flex items-center gap-1 pt-0.5">
+                                  <span className="flex text-amber-400">
+                                    {Array.from({ length: 5 }).map((_, i) => (
+                                      <Star key={i} size={10} className={i < Math.floor(prod.rating) ? 'fill-amber-400 text-amber-400' : 'text-slate-200 dark:text-slate-800'} />
+                                    ))}
+                                  </span>
+                                  <span className="text-[9px] font-bold text-slate-500">({prod.reviewCount})</span>
+                                </div>
                               </div>
 
                               {/* Pricing */}
-                              <div className="pt-1 flex items-baseline gap-1.5">
-                                <span className="text-base font-black text-slate-950 dark:text-white font-mono">₹{prod.price.toLocaleString('en-IN')}</span>
-                                <span className="text-[11px] text-slate-400 line-through font-mono">₹{prod.originalPrice.toLocaleString('en-IN')}</span>
-                                <span className="text-[9px] font-extrabold text-rose-500">-{prod.discount}%</span>
+                              <div className="pt-2 flex items-baseline flex-wrap gap-1">
+                                <span className="text-sm sm:text-base font-black text-slate-900 dark:text-white font-mono">
+                                  ₹{prod.price.toLocaleString('en-IN')}
+                                </span>
+                                <span className="text-[10px] text-slate-400 line-through font-mono">
+                                  ₹{prod.originalPrice.toLocaleString('en-IN')}
+                                </span>
+                                <span className="text-[9px] font-extrabold text-rose-500">
+                                  -{prod.discount}%
+                                </span>
                               </div>
                             </div>
 
                             {/* Actions CTA panel */}
-                            <div className="mt-4 pt-3.5 border-t border-slate-50 dark:border-slate-850/60 flex items-center gap-2">
-                              <button
-                                onClick={() => {
-                                  setSelectedProduct(prod);
-                                  setCurrentPage('product-detail');
-                                }}
-                                className="flex-1 flex items-center justify-center gap-1 rounded-lg border border-slate-150 py-2 text-[10px] font-extrabold text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-850 cursor-pointer"
-                              >
-                                View Details
-                              </button>
-
-                              <button
+                            <div className="mt-3.5 pt-3 border-t border-slate-50 dark:border-slate-850/60 flex flex-col gap-2">
+                              <a
+                                href={prod.affiliateUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 onClick={() => {
                                   trackAffiliateRedirect(prod);
-                                  window.open(prod.affiliateUrl, '_blank', 'noopener,noreferrer');
                                 }}
-                                className="flex-1 rounded-lg bg-amber-500 py-2 text-center text-[10px] font-black uppercase tracking-wider text-slate-950 hover:bg-amber-400 transition cursor-pointer"
+                                className="w-full rounded-lg bg-amber-500 py-2 text-center text-[10px] font-black uppercase tracking-wider text-slate-950 hover:bg-amber-400 transition cursor-pointer flex items-center justify-center gap-1.5 shadow-xs"
                               >
+                                <ShoppingBag size={11} />
                                 Buy on Amazon
-                              </button>
+                              </a>
                             </div>
 
                           </div>
@@ -819,15 +847,17 @@ export default function App() {
                         <h4 className="text-xs font-black text-slate-950 dark:text-white truncate group-hover:text-amber-500" onClick={() => { setSelectedProduct(p); setCurrentPage('product-detail'); }}>{p.title}</h4>
                         <p className="text-sm font-black text-amber-500 font-mono mt-1">₹{p.price.toLocaleString('en-IN')}</p>
                       </div>
-                      <button
+                      <a
+                        href={p.affiliateUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         onClick={() => {
                           trackAffiliateRedirect(p);
-                          window.open(p.affiliateUrl, '_blank');
                         }}
-                        className="mt-4 w-full rounded-lg bg-amber-500 py-2 text-center text-[10px] font-black uppercase text-slate-950 hover:bg-amber-400 cursor-pointer"
+                        className="mt-4 block w-full rounded-lg bg-amber-500 py-2 text-center text-[10px] font-black uppercase text-slate-950 hover:bg-amber-400 cursor-pointer"
                       >
                         Buy on Amazon
-                      </button>
+                      </a>
                     </div>
                   ))}
                 </div>
@@ -951,18 +981,21 @@ export default function App() {
                       </span>
                     </div>
 
-                    <button
-                      onClick={() => {
-                        // Open the top affiliate URL from cart items as checkout simulator
+                    <a
+                      href={cart.length > 0 ? cart[0].affiliateUrl : '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => {
                         if (cart.length > 0) {
                           trackAffiliateRedirect(cart[0]);
-                          window.open(cart[0].affiliateUrl, '_blank');
+                        } else {
+                          e.preventDefault();
                         }
                       }}
-                      className="w-full rounded-xl bg-amber-500 py-3 text-center text-xs font-black uppercase text-slate-950 hover:bg-amber-400 cursor-pointer shadow-md"
+                      className="block w-full rounded-xl bg-amber-500 py-3 text-center text-xs font-black uppercase text-slate-950 hover:bg-amber-400 cursor-pointer shadow-md"
                     >
                       Checkout on Amazon
-                    </button>
+                    </a>
 
                     <p className="text-[10px] text-slate-400 leading-relaxed text-center">Checkout operations sync secure partner codes. Your purchase is fulfilled directly on Amazon.com.</p>
                   </div>
@@ -1114,8 +1147,8 @@ export default function App() {
           onAddCategory={handleAddCategory}
           onUpdateCategory={handleUpdateCategory}
           onDeleteCategory={handleDeleteCategory}
-          onUpdateBanners={setBanners}
-          onUpdateSettings={setSettings}
+          onUpdateBanners={handleUpdateBanners}
+          onUpdateSettings={handleUpdateSettings}
           settings={settings}
           currentUser={currentUser}
           onClose={() => setIsAdminPanelOpen(false)}

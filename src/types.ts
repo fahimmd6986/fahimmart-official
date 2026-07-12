@@ -51,6 +51,7 @@ export interface Product {
   isFeatured?: boolean;
   isTodayDeal?: boolean;
   bestSeller?: boolean;
+  aiField?: string;
 }
 
 export interface Category {

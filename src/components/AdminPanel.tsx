@@ -7,9 +7,17 @@ import React, { useState, useEffect } from 'react';
 import { 
   Award, Shield, FileText, Smartphone, Laptop, Edit3, Trash2, Plus, 
   Settings, BarChart3, Users, Image as ImageIcon, Link as LinkIcon, 
-  Activity, CheckCircle, AlertTriangle, XCircle, Search, Save, Info 
+  Activity, CheckCircle, AlertTriangle, XCircle, Search, Save, Info,
+  Upload 
 } from 'lucide-react';
 import { Product, Category, Banner, AuditLog, ClickAnalytic, SearchAnalytic, WebsiteSettings } from '../types';
+import { 
+  subscribeToUsers, 
+  subscribeToAuditLogs, 
+  saveUserToCloud, 
+  deleteUserFromCloud, 
+  saveAuditLogToCloud 
+} from '../lib/firebaseService';
 
 interface AdminPanelProps {
   products: Product[];
@@ -86,6 +94,9 @@ export default function AdminPanel({
   const [formSeoDesc, setFormSeoDesc] = useState('');
   const [formSeoKeywords, setFormSeoKeywords] = useState('');
   const [formIsPrime, setFormIsPrime] = useState(true);
+  const [formAiField, setFormAiField] = useState('');
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+  const [aiGenerationError, setAiGenerationError] = useState('');
 
   // Validation feedback
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -115,37 +126,48 @@ export default function AdminPanel({
   const [clickAnalytics, setClickAnalytics] = useState<ClickAnalytic[]>([]);
   const [searchAnalytics, setSearchAnalytics] = useState<SearchAnalytic[]>([]);
 
-  // Load telemetry logs from localStorage
+  // Load telemetry logs from Firestore and localStorage
   useEffect(() => {
-    setAuditLogs(JSON.parse(localStorage.getItem('fm_audit_logs') || '[]'));
     setClickAnalytics(JSON.parse(localStorage.getItem('fm_click_analytics') || '[]'));
     setSearchAnalytics(JSON.parse(localStorage.getItem('fm_search_analytics') || '[]'));
 
-    // Load registered users list
-    const storedUsersJson = localStorage.getItem('fm_users');
-    let storedUsers = storedUsersJson ? JSON.parse(storedUsersJson) : [];
-    // Always make sure owner is in user list and has Admin role
-    const ownerExists = storedUsers.some((u: any) => u.email.toLowerCase() === 'fahimmd6986@gmail.com');
-    if (!ownerExists) {
-      const ownerUser = {
-        id: 'u_admin',
-        email: 'fahimmd6986@gmail.com',
-        name: 'Fahim (Owner)',
-        role: 'Admin',
-        createdAt: new Date().toISOString()
-      };
-      storedUsers.unshift(ownerUser);
-      localStorage.setItem('fm_users', JSON.stringify(storedUsers));
-    }
-    // Also enforce that any other user has role 'Customer'
-    storedUsers = storedUsers.map((u: any) => {
-      if (u.email.toLowerCase() === 'fahimmd6986@gmail.com') {
-        return { ...u, role: 'Admin' };
+    // Subscribe to Firestore Users
+    const unsubUsers = subscribeToUsers((cloudUsers) => {
+      // Ensure Md Fahim (permanent Super Admin) is always seeded
+      const ownerExists = cloudUsers.some((u: any) => u.email.toLowerCase() === 'fahimmd6986@gmail.com');
+      let finalUsers = [...cloudUsers];
+      if (!ownerExists) {
+        const ownerUser = {
+          id: 'u_admin',
+          email: 'fahimmd6986@gmail.com',
+          name: 'Fahim (Owner)',
+          role: 'Admin',
+          createdAt: new Date().toISOString()
+        };
+        finalUsers.unshift(ownerUser);
+        saveUserToCloud(ownerUser).catch(err => console.error("Error auto-seeding admin to Firestore:", err));
       }
-      return { ...u, role: 'Customer' };
+      
+      // Enforce Md Fahim has permanent Admin role, everyone else has Customer
+      finalUsers = finalUsers.map((u: any) => {
+        if (u.email.toLowerCase() === 'fahimmd6986@gmail.com') {
+          return { ...u, role: 'Admin' };
+        }
+        return { ...u, role: 'Customer' };
+      });
+      setUsers(finalUsers);
     });
-    setUsers(storedUsers);
-  }, [activeTab, isProductModalOpen]);
+
+    // Subscribe to Firestore Audit Logs
+    const unsubAudit = subscribeToAuditLogs((cloudLogs) => {
+      setAuditLogs(cloudLogs);
+    });
+
+    return () => {
+      unsubUsers();
+      unsubAudit();
+    };
+  }, []);
 
   if (!isAdmin) {
     return (
@@ -204,18 +226,21 @@ export default function AdminPanel({
 
     storedUsers.push(newUser);
     localStorage.setItem('fm_users', JSON.stringify(storedUsers));
+    saveUserToCloud(newUser).catch(err => console.error("Error saving user to Firestore:", err));
 
     // Audit Log
     const logs = JSON.parse(localStorage.getItem('fm_audit_logs') || '[]');
-    logs.unshift({
+    const newAuditLog = {
       id: 'log_' + Date.now(),
       userEmail: currentUser?.email || 'admin@fahimmart.com',
       action: 'ADMIN_CREATE_USER',
       details: `Created new user account: ${newUser.email} with role: ${newUser.role}`,
       timestamp: new Date().toISOString(),
-      status: 'SUCCESS'
-    });
+      status: 'SUCCESS' as const
+    };
+    logs.unshift(newAuditLog);
     localStorage.setItem('fm_audit_logs', JSON.stringify(logs));
+    saveAuditLogToCloud(newAuditLog).catch(err => console.error("Error saving audit log to Firestore:", err));
 
     setUserFormSuccess(`User ${newUser.name} created successfully!`);
     setNewUserEmail('');
@@ -252,18 +277,21 @@ export default function AdminPanel({
 
     storedUsers = storedUsers.filter((u: any) => u.id !== userId);
     localStorage.setItem('fm_users', JSON.stringify(storedUsers));
+    deleteUserFromCloud(userId).catch(err => console.error("Error deleting user from Firestore:", err));
 
     // Audit Log
     const logs = JSON.parse(localStorage.getItem('fm_audit_logs') || '[]');
-    logs.unshift({
+    const delAuditLog = {
       id: 'log_' + Date.now(),
       userEmail: currentUser?.email || 'admin@fahimmart.com',
       action: 'ADMIN_DELETE_USER',
       details: `Deleted user account: ${email}`,
       timestamp: new Date().toISOString(),
-      status: 'SUCCESS'
-    });
+      status: 'SUCCESS' as const
+    };
+    logs.unshift(delAuditLog);
     localStorage.setItem('fm_audit_logs', JSON.stringify(logs));
+    saveAuditLogToCloud(delAuditLog).catch(err => console.error("Error saving delete user audit log to Firestore:", err));
 
     // Refresh
     const updatedUsers = storedUsers.map((u: any) => {
@@ -273,6 +301,42 @@ export default function AdminPanel({
       return { ...u, role: 'Customer' };
     });
     setUsers(updatedUsers);
+  };
+
+  const handleGenerateAiField = async () => {
+    if (!formTitle.trim()) {
+      setAiGenerationError('Please enter a Product Title first to generate an AI recommendation.');
+      return;
+    }
+    setIsGeneratingAi(true);
+    setAiGenerationError('');
+    try {
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: formTitle,
+          brand: formBrand,
+          category: formCategory,
+          description: formShortDesc || formFullDesc,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Server returned an error generating AI content.');
+      }
+
+      const data = await res.json();
+      setFormAiField(data.text);
+    } catch (err: any) {
+      console.error('Error generating AI field:', err);
+      setAiGenerationError(err.message || 'Failed to generate AI recommendation. Make sure GEMINI_API_KEY is configured in Settings > Secrets.');
+    } finally {
+      setIsGeneratingAi(false);
+    }
   };
 
   // Populate form fields for product creation or editing
@@ -311,6 +375,8 @@ export default function AdminPanel({
       setFormSeoDesc(prod.seo.description);
       setFormSeoKeywords(prod.seo.keywords.join(', '));
       setFormIsPrime(prod.isPrime);
+      setFormAiField(prod.aiField || '');
+      setAiGenerationError('');
     } else {
       setEditingProduct(null);
       setFormTitle('');
@@ -335,6 +401,8 @@ export default function AdminPanel({
       setFormSeoDesc('');
       setFormSeoKeywords('');
       setFormIsPrime(true);
+      setFormAiField('');
+      setAiGenerationError('');
     }
     setIsProductModalOpen(true);
   };
@@ -352,8 +420,8 @@ export default function AdminPanel({
     if (!formAffiliateUrl.trim() || !formAffiliateUrl.startsWith('http')) {
       errors.push('Affiliate URL is required and must begin with http:// or https://');
     }
-    if (!formMainImage.trim() || !formMainImage.startsWith('http')) {
-      errors.push('Main Image URL is required and must begin with http:// or https://');
+    if (!formMainImage.trim() || (!formMainImage.startsWith('http') && !formMainImage.startsWith('data:image'))) {
+      errors.push('Product Photo is required (please upload an image).');
     }
     
     const priceNum = parseFloat(formPrice);
@@ -430,7 +498,8 @@ export default function AdminPanel({
         description: formSeoDesc.trim() || formShortDesc.trim(),
         keywords: formSeoKeywords.split(',').map(k => k.trim()).filter(k => k.length > 0)
       },
-      isPrime: formIsPrime
+      isPrime: formIsPrime,
+      aiField: formAiField.trim()
     };
 
     if (editingProduct) {
@@ -1253,14 +1322,62 @@ export default function AdminPanel({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Main Image URL *</label>
-                  <input
-                    type="text"
-                    value={formMainImage}
-                    onChange={(e) => setFormMainImage(e.target.value)}
-                    className="w-full rounded bg-slate-950 p-2 text-xs text-white border border-slate-800 focus:outline-none font-mono"
-                    placeholder="https://images.unsplash.com/..."
-                  />
+                  <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">Product Photo (Photo Upload) *</label>
+                  {formMainImage ? (
+                    <div className="relative group rounded border border-slate-800 bg-slate-950 overflow-hidden h-24 flex items-center justify-center">
+                      <img src={formMainImage} alt="Uploaded product preview" className="object-contain h-full w-full p-1" />
+                      <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <label className="cursor-pointer bg-amber-500 hover:bg-amber-600 text-slate-950 text-[10px] font-extrabold px-3 py-1.5 rounded tracking-wide uppercase transition-colors">
+                          Change Photo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                  setFormMainImage(reader.result as string);
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setFormMainImage('')}
+                          className="bg-red-500 hover:bg-red-600 text-white text-[10px] font-extrabold px-3 py-1.5 rounded tracking-wide uppercase transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center border-2 border-dashed border-slate-800 hover:border-amber-500/50 bg-slate-950 hover:bg-slate-900/50 rounded h-24 cursor-pointer transition-all duration-200">
+                      <div className="flex flex-col items-center justify-center py-2 px-4 text-center">
+                        <Upload className="h-5 w-5 text-amber-500 mb-1 animate-pulse" />
+                        <p className="text-[10px] text-slate-300 font-extrabold tracking-wider uppercase">CLICK TO UPLOAD PHOTO</p>
+                        <p className="text-[8px] text-slate-500 mt-0.5">PNG, JPG, WEBP formats supported</p>
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setFormMainImage(reader.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
+                  )}
                 </div>
               </div>
 
@@ -1352,6 +1469,45 @@ export default function AdminPanel({
                   onChange={(e) => setFormFullDesc(e.target.value)}
                   className="w-full rounded bg-slate-950 p-2 text-xs text-white border border-slate-800 focus:outline-none leading-relaxed"
                   placeholder="The AcoustiMax X-Gen Quantum Sound Pro represents the absolute pinnacle of acoustic engineering..."
+                />
+              </div>
+
+              {/* AI Field Section */}
+              <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.03] p-4 space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <label className="block text-[10.5px] uppercase font-black text-amber-500 tracking-wider">✨ AI RECOMMENDATION & ADVICE</label>
+                    <p className="text-[9px] text-slate-400 mt-0.5">Generate premium fashion or tech copywriting with Gemini AI</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGenerateAiField}
+                    disabled={isGeneratingAi}
+                    className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-400 to-amber-600 hover:from-amber-350 hover:to-amber-550 text-slate-950 text-[10px] font-black uppercase tracking-wider transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+                  >
+                    {isGeneratingAi ? (
+                      <>
+                        <span className="animate-spin border-2 border-slate-950 border-t-transparent rounded-full h-3 w-3 inline-block" />
+                        Generating...
+                      </>
+                    ) : (
+                      '✨ Generate with AI'
+                    )}
+                  </button>
+                </div>
+
+                {aiGenerationError && (
+                  <p className="text-[10px] font-semibold text-rose-500 bg-rose-950/20 px-3 py-1.5 rounded border border-rose-500/30">
+                    ⚠️ {aiGenerationError}
+                  </p>
+                )}
+
+                <textarea
+                  rows={4}
+                  value={formAiField}
+                  onChange={(e) => setFormAiField(e.target.value)}
+                  className="w-full rounded bg-slate-950 p-2.5 text-xs text-white border border-slate-850 focus:border-amber-500/40 focus:outline-none leading-relaxed"
+                  placeholder="Click 'Generate with AI' above or enter a custom recommendation/styling advice here..."
                 />
               </div>
 

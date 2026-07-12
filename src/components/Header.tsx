@@ -153,17 +153,18 @@ export default function Header({
               onSetSearchQuery('');
               onNavigateTo('home');
             }} 
-            className="flex shrink-0 cursor-pointer items-center gap-2.5"
+            className="flex shrink-0 cursor-pointer items-center gap-3 hover:opacity-90 transition-opacity"
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 font-sans text-lg font-black text-slate-950 shadow-md ring-2 ring-amber-500/30">
-              FM
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600 font-sans text-base font-black text-slate-950 shadow-lg ring-2 ring-amber-400/50 relative overflow-hidden group">
+              <span className="relative z-10 font-black tracking-tighter">FM</span>
+              <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/25 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000" />
             </div>
-            <div className="hidden sm:block">
-              <span className="block font-sans text-xl font-extrabold tracking-tight text-white leading-none">
-                Fahim<span className="text-amber-400">Mart</span>
+            <div className="flex flex-col">
+              <span className="block font-sans text-lg sm:text-xl font-black tracking-tight text-white leading-none">
+                FAHIM<span className="text-amber-400">MART</span>
               </span>
-              <span className="mt-0.5 block text-[9px] font-medium tracking-widest text-slate-400 uppercase">
-                Premium Deals
+              <span className="mt-1 block text-[8px] sm:text-[9px] font-extrabold tracking-[0.2em] text-amber-400/85 uppercase leading-none">
+                PREMIUM CURATOR
               </span>
             </div>
           </div>
