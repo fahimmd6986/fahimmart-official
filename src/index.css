@@ -1,0 +1,51 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&family=Space+Grotesk:wght@500;700;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-display: "Space Grotesk", sans-serif;
+
+  --color-slate-950: #050505;
+  --color-slate-900: #080808;
+  --color-slate-850: #111111;
+  --color-slate-800: #1A1A1A;
+  --color-slate-150: rgba(255, 255, 255, 0.05);
+  --color-slate-100: #E5E5E5;
+  --color-slate-50: rgba(255, 255, 255, 0.03);
+
+  --color-amber-400: #F27D26;
+  --color-amber-500: #FF9900;
+  --color-amber-600: #F27D26;
+  --color-rose-500: #F27D26;
+}
+
+body {
+  background-color: #050505;
+  color: #E5E5E5;
+}
+
+@layer utilities {
+  .animate-spin-slow {
+    animation: spin 16s linear infinite;
+  }
+  .animate-fade-in {
+    animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
