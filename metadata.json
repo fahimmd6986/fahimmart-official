@@ -1,6 +1,6 @@
 {
   "name": "FahimMart",
   "description": "Smart Shopping. Better Choices. Trusted Amazon Deals.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

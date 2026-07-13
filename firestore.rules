@@ -29,5 +29,13 @@ service cloud.firestore {
     match /audit_logs/{logId} {
       allow read, write: if true;
     }
+
+    match /ai_settings/{id} {
+      allow read, write: if true;
+    }
+
+    match /prompt_versions/{id} {
+      allow read, write: if true;
+    }
   }
 }
